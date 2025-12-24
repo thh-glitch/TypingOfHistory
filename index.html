@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>墨伐春秋：鎮魔錄 (最終修正版)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink-black: #0a0a0a;
+            --paper-bg: #f3e7d3;
+            --cinnabar: #c92a2a;
+            --gold: #ffd700;
+            --jade: #2b8a3e;
+            --shield-glow: #00e5ff; 
+            --hp-red: #ff0000; 
+            --hp-empty: #444; 
+        }
+
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Noto Serif TC', serif; user-select: none; }
+        
+        #game-container {
+            position: relative; width: 100vw; height: 100vh; overflow: hidden;
+            transition: transform 0.1s; 
+        }
+
+        #game-border {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            border: 20px solid transparent;
+            border-image: url("https://www.transparenttextures.com/patterns/wood-pattern.png") 30 stretch;
+            pointer-events: none; z-index: 999;
+        }
+
+        /* --- 特效層 --- */
+        #ink-blindness {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 20%, #000 90%);
+            background-color: rgba(0,0,0,0.95);
+            opacity: 0; pointer-events: none; z-index: 900;
+            transition: opacity 0.5s;
+        }
+        .blind-active { opacity: 1 !important; }
+
+        #skill-flash {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 215, 0, 0.6);
+            opacity: 0; pointer-events: none; z-index: 850;
+            transition: opacity 0.3s;
+        }
+        .flash-active { opacity: 1 !important; }
+
+        /* Combo 顯示 (增加過渡效果) */
+        #combo-display {
+            position: absolute; top: 20%; left: 5%;
+            font-family: 'Zhi Mang Xing'; font-size: 80px; color: var(--gold);
+            text-shadow: 0 0 20px #ff0000; z-index: 150;
+            opacity: 0; transform: scale(0.5); 
+            transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+            pointer-events: none;
+        }
+        .combo-visible { opacity: 1 !important; transform: scale(1) !important; }
+        .combo-pop { transform: scale(1.3) !important; }
+
+        /* 攻擊光束特效 */
+        .projectile {
+            position: absolute; width: 15px; height: 15px; background: #fff;
+            border-radius: 50%; box-shadow: 0 0 15px var(--gold), 0 0 30px #fff;
+            z-index: 200; pointer-events: none; transition: transform 0.1s linear;
+        }
+
+        /* 背景 */
+        #bg-layer {
+            position: absolute; width: 100%; height: 100%; top: 0; left: 0;
+            background-size: cover; background-position: center;
+            background-color: #333; z-index: 0;
+            transition: opacity 1s ease-in-out;
+        }
+        @keyframes bgMove { 0% { transform: scale(1.0); } 100% { transform: scale(1.15); } }
+        .bg-anim { animation: bgMove 30s linear forwards; }
+
+        #scene-layer { position: absolute; width: 100%; height: 100%; perspective: 800px; transform-style: preserve-3d; z-index: 10; }
+        .floor { 
+            position: absolute; bottom: 0; width: 100%; height: 40%; 
+            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
+            transform-origin: bottom; transform: rotateX(60deg); pointer-events: none;
+        }
+
+        /* Boss */
+        #boss-entity { 
+            position: absolute; left: 50%; top: 40%; 
+            transform: translate(-50%, -50%) translateZ(-600px); 
+            display: flex; flex-direction: column; align-items: center; 
+            opacity: 0; transition: opacity 1s, transform 0.5s; z-index: 50; 
+        }
+        .boss-img { width: 450px; filter: drop-shadow(0 0 30px var(--cinnabar)); animation: bossFloat 4s infinite ease-in-out; }
+        .boss-name { font-family: 'Zhi Mang Xing'; font-size: 80px; color: var(--cinnabar); text-shadow: 2px 2px 0 #fff; margin-top: -20px; }
+        .boss-hp-frame { width: 600px; height: 30px; background: #222; border: 4px solid #555; margin-bottom: 10px; border-radius: 4px; overflow: hidden; }
+        #boss-hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0000, #800000); transition: width 0.2s; }
+        @keyframes bossFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-30px); } }
+
+        /* UI */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box; z-index: 100; }
+        
+        .top-bar { display: flex; justify-content: space-between; align-items: flex-start; pointer-events: auto; }
+        .score-box { background: rgba(0,0,0,0.6); padding: 5px 20px; border: 1px solid var(--gold); color: var(--gold); font-size: 24px; font-weight: bold; font-family: 'Zhi Mang Xing'; }
+        .progress-text { color: #fff; font-size: 18px; margin-top: 5px; text-shadow: 1px 1px 2px #000; }
+
+        .bottom-hud { display: flex; flex-direction: column; width: 100%; align-items: center; gap: 8px; pointer-events: auto; }
+
+        .skills-bar { display: flex; gap: 15px; margin-bottom: 5px; }
+        .skill-btn { 
+            width: 70px; height: 70px; border: 2px solid #555; background: #222; border-radius: 8px; 
+            position: relative; overflow: hidden; cursor: pointer; display: flex; justify-content: center; align-items: center; 
+            font-family: 'Zhi Mang Xing'; font-size: 28px; color: #666; transition: 0.2s; 
+        }
+        .skill-key { position: absolute; top: 2px; left: 5px; font-size: 12px; font-family: sans-serif; color: #888; }
+        .skill-cooldown { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: rgba(0,0,0,0.8); transition: height 0.1s; z-index: 2; }
+        .skill-ready { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 10px var(--gold); }
+        .skill-ready:hover { transform: scale(1.1); background: #333; }
+        
+        .hp-container { width: 600px; height: 25px; position: relative; background: #111; border: 2px solid #5d4037; overflow: hidden; }
+        .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--jade), #ffff00, var(--cinnabar)); transition: width 0.3s; }
+        .hp-text { position: absolute; width: 100%; text-align: center; top: 0px; color: #fff; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 1px #000; z-index: 2; }
+
+        #player-input { 
+            width: 500px; padding: 15px; font-size: 32px; text-align: center; font-weight: bold;
+            background: rgba(0,0,0,0.8); border: none; border-bottom: 4px solid var(--paper-bg); 
+            color: var(--gold); outline: none; align-self: center; font-family: 'Noto Serif TC'; transition: 0.3s;
+        }
+        .input-locked { border-color: var(--gold) !important; background: rgba(50, 40, 0, 0.8) !important; }
+
+        #status-msg {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 80px; color: red; font-family: 'Zhi Mang Xing'; font-weight: bold; text-shadow: 0 0 20px #000;
+            opacity: 0; pointer-events: none; z-index: 150; transition: opacity 0.2s;
+        }
+
+        /* --- 怪物樣式 --- */
+        .enemy { position: absolute; transform-style: preserve-3d; display: flex; flex-direction: column; align-items: center; will-change: transform; transition: transform 0.1s linear; }
+        
+        .enemy-hp-container {
+            display: flex; gap: 2px; justify-content: center; margin-bottom: 5px;
+            padding: 3px; border-radius: 4px; transition: box-shadow 0.3s;
+        }
+        .hp-block {
+            width: 18px; height: 12px;
+            background-color: var(--hp-red); border: 1px solid #500; border-radius: 2px; box-shadow: 0 0 2px #000;
+        }
+        .hp-block.depleted { background-color: var(--hp-empty); border-color: #222; }
+
+        .enemy-box { 
+            background: rgba(20, 20, 20, 0.95); border: 2px solid var(--paper-bg); 
+            padding: 15px 25px; border-radius: 8px; text-align: center; min-width: 280px; 
+            box-shadow: 0 0 15px rgba(0,0,0,0.8); position: relative;
+        }
+
+        .answer-hint {
+            display: block; color: #ffd700; font-size: 24px; font-weight: bold; margin-top: 5px;
+            text-shadow: 0 0 5px #000; opacity: 0; transition: opacity 0.5s;
+        }
+
+        .enemy.shielded .enemy-hp-container {
+            background: rgba(0, 229, 255, 0.2);
+            box-shadow: 0 0 20px var(--shield-glow), 0 0 10px var(--shield-glow) inset;
+            border: 2px solid var(--shield-glow);
+        }
+
+        .enemy-img { width: 160px; height: 160px; object-fit: contain; margin-top: 5px; filter: drop-shadow(0 5px 10px #000); }
+        .q-text { font-size: 32px; color: #fff; font-weight: bold; margin-bottom: 5px; text-shadow: 2px 2px 0 #000; }
+        
+        .enemy-locked .enemy-box { border-color: var(--gold); box-shadow: 0 0 20px var(--gold); transform: scale(1.05); }
+        .enemy-locked .q-text { color: var(--gold); }
+
+        .enemy.ghost .enemy-img { opacity: 0.8; animation: ghostFloat 2s infinite ease-in-out; }
+        @keyframes ghostFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        .overlay-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 200; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #intro-screen { background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('bg_hell.webp'); background-size: cover; background-position: center; }
+        
+        /* 捲軸特效 */
+        .crawl-container {
+            width: 80%; height: 400px; perspective: 400px; overflow: hidden;
+            mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
+            margin-bottom: 20px;
+        }
+        .crawl-content {
+            color: #ffcea0; font-size: 36px; font-weight: bold; text-align: center; line-height: 1.6;
+            position: relative; top: 100%;
+            transform-origin: 50% 100%;
+            transform: rotateX(25deg);
+            animation: crawl 45s linear infinite;
+        }
+        
+        /* 勝利時的捲軸 */
+        .victory-crawl {
+            color: var(--gold) !important; text-shadow: 0 0 10px #ff4500;
+            animation: crawlVictory 40s linear forwards !important;
+        }
+
+        @keyframes crawl {
+            0% { top: 100%; transform: rotateX(20deg) translateZ(0); opacity: 1; }
+            100% { top: -250%; transform: rotateX(25deg) translateZ(-100px); opacity: 0; }
+        }
+        @keyframes crawlVictory {
+            0% { top: 100%; transform: rotateX(20deg) translateZ(0); opacity: 1; }
+            100% { top: -200%; transform: rotateX(25deg) translateZ(-100px); opacity: 0; }
+        }
+
+        #end-title { font-family: 'Zhi Mang Xing'; font-size: 100px; margin-bottom: 20px; font-weight: 900; text-shadow: 0 0 20px #000; }
+        .title { font-family: 'Zhi Mang Xing'; font-size: 100px; color: var(--gold); margin-bottom: 10px; text-shadow: 0 0 20px #ff4500; }
+        .btn { padding: 15px 50px; margin: 10px; background: transparent; color: var(--paper-bg); border: 2px solid var(--paper-bg); font-size: 24px; font-weight: bold; cursor: pointer; transition: 0.2s; font-family: 'Noto Serif TC'; }
+        .btn:hover { background: var(--cinnabar); border-color: var(--cinnabar); color: #fff; }
+
+        .hidden { display: none !important; }
+        .hit-red .enemy-box { background-color: #a00 !important; border-color: #f00 !important; transform: scale(1.1); }
+        .dying { animation: deathAnim 0.3s forwards; }
+        @keyframes deathAnim { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+
+        .silenced { background-color: #311 !important; color: #888 !important; pointer-events: none; border-bottom-color: #555 !important; }
+        .silenced::placeholder { color: #d00; content: "!!! 禁言封口 !!!"; }
+
+        .shake { animation: shakeAnim 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shakeAnim {
+            10%, 90% { transform: translate3d(-4px, 0, 0); }
+            20%, 80% { transform: translate3d(6px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+            40%, 60% { transform: translate3d(8px, 0, 0); }
+        }
+
+        /* 龍虎榜樣式 */
+        #leaderboard { width: 60%; margin-top: 20px; border-collapse: collapse; color: #fff; font-size: 24px; }
+        #leaderboard th, #leaderboard td { border-bottom: 1px solid #555; padding: 10px; text-align: center; }
+        #leaderboard th { color: var(--gold); }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="game-border"></div>
+        <div id="ink-blindness"></div>
+        <div id="skill-flash"></div>
+        <div id="bg-layer"></div>
+        
+        <div id="combo-display">連擊 x 0</div>
+
+        <div id="scene-layer">
+            <div class="floor"></div>
+            <div id="boss-entity">
+                <div class="boss-hp-frame"><div id="boss-hp-fill"></div></div>
+                <img src="boss_taotie.webp" alt="饕餮" class="boss-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <div style="font-size:200px; display:none;">👹</div>
+                <div class="boss-name">饕餮</div>
+            </div>
+        </div>
+
+        <div id="fx-layer" style="position:absolute; width:100%; height:100%; pointer-events:none; z-index:90;"></div>
+
+        <div id="ui-layer">
+            <div class="top-bar">
+                <div>
+                    <div class="score-box">功績: <span id="score">0</span></div>
+                    <div class="progress-text" id="boss-progress">距離 Boss: 尚餘 20 隻</div>
+                </div>
+                <div style="color:var(--gold); font-size:24px; font-weight:bold;">第 <span id="bg-index">1</span> 景</div>
+            </div>
+            
+            <div id="status-msg"></div>
+
+            <div class="bottom-hud">
+                <div class="skills-bar">
+                    <div class="skill-btn skill-ready" id="skill-q" onclick="castSkill('q')"><span class="skill-key">Q</span>滅<div class="skill-cooldown" id="cd-q"></div></div>
+                    <div class="skill-btn skill-ready" id="skill-w" onclick="castSkill('w')"><span class="skill-key">W</span>定<div class="skill-cooldown" id="cd-w"></div></div>
+                    <div class="skill-btn skill-ready" id="skill-e" onclick="castSkill('e')"><span class="skill-key">E</span>示<div class="skill-cooldown" id="cd-e"></div></div>
+                    <div class="skill-btn skill-ready" id="skill-r" onclick="castSkill('r')"><span class="skill-key">R</span>癒<div class="skill-cooldown" id="cd-r"></div></div>
+                </div>
+
+                <div class="hp-container">
+                    <div class="hp-fill" id="hp-fill"></div>
+                    <div class="hp-text">史冊命脈</div>
+                </div>
+                
+                <input type="text" id="player-input" placeholder="在此題字..." autocomplete="off">
+            </div>
+        </div>
+
+        <div id="intro-screen" class="overlay-screen">
+            <div class="title">墨伐春秋</div>
+            <div class="crawl-container">
+                <div class="crawl-content">
+                    <p>上古紀元 混沌初開</p>
+                    <p>凶獸「饕餮」甦醒</p>
+                    <p>吞噬文字 篡改信史</p>
+                    <p>華夏文明 危在旦夕</p>
+                    <br>
+                    <p>你乃當世「太史公」</p>
+                    <p>手執春秋之筆</p>
+                    <p>誓死守護正統史觀</p>
+                    <br>
+                    <p>穿越城門 踏過園林</p>
+                    <p>跨越險橋 駐足客棧</p>
+                    <p>直搗黃龍 封印魔獸</p>
+                </div>
+            </div>
+            <button class="btn" onclick="showDifficulty()">[ 提筆入世 ]</button>
+        </div>
+
+        <div id="difficulty-screen" class="overlay-screen hidden">
+            <div class="title">選擇試煉</div>
+            <button class="btn" onclick="startGame('easy')">童生 (極慢)</button>
+            <button class="btn" onclick="startGame('normal')">進士 (普通)</button>
+            <button class="btn" style="border-color:var(--cinnabar); color:var(--cinnabar);" onclick="startGame('hard')">狀元 (挑戰)</button>
+        </div>
+
+        <div id="game-over-screen" class="overlay-screen hidden">
+            <div id="victory-scroll" class="crawl-container hidden" style="height: 500px;">
+                <div class="crawl-content victory-crawl">
+                    <p>太史公 筆伐千軍</p>
+                    <p>饕餮封印 魔氣盡散</p>
+                    <p>史冊重光 正統得存</p>
+                    <br>
+                    <p>春秋大義 萬世流芳</p>
+                    <p>華夏文明 薪火相傳</p>
+                    <br>
+                    <p>功德圓滿 榮歸故里</p>
+                </div>
+            </div>
+
+            <div class="title" id="end-title">史冊盡毀</div>
+            <p id="end-reason" style="font-size: 32px; color: #ccc; margin:10px;">原因</p>
+            <p style="font-size: 40px; color: var(--gold);">最終功績: <span id="final-score">0</span></p>
+            
+            <table id="leaderboard">
+                <thead><tr><th>排名</th><th>日期</th><th>分數</th></tr></thead>
+                <tbody id="leaderboard-body"></tbody>
+            </table>
+
+            <button class="btn" id="restart-btn" onclick="location.reload()">重新輪迴</button>
+        </div>
+    </div>
+
+<script>
+    // 題庫 (已修正)
+    const rawQuestions = [
+        { q: "人文初祖?", a: "黃帝" }, { q: "治水三過家門而不入?", a: "大禹" }, { q: "射日英雄?", a: "后羿" }, 
+        { q: "中國第一個王朝?", a: "夏朝" }, { q: "商朝亡國暴君?", a: "紂王" }, { q: "誰制禮作樂?", a: "周公" },
+        { q: "周分封土地制度?", a: "封建" }, { q: "周嫡庶繼承制度?", a: "宗法制" }, { q: "周土地制度?", a: "井田制" },
+        { q: "春秋五霸首霸?", a: "齊桓公" }, { q: "齊桓公宰相?", a: "管仲" }, { q: "霸主口號?", a: "尊王攘夷" }, /* 修正 1 */
+        { q: "天子到諸侯領地視察?", a: "巡狩" }, { q: "諸侯定期面見天子?", a: "朝覲" }, { q: "三家分晉，晉被分為?", a: "韓趙魏" },
+        { q: "封建制下，天子以下的是?", a: "諸侯" }, { q: "諸侯公為哪五等?", a: "公侯百子男" }, { q: "儒家創始人?", a: "孔子" },
+        { q: "孔子被稱為?", a: "萬世師表" }, { q: "主張性善", a: "孟子" }, { q: "主張性惡?", a: "荀子" },
+        { q: "道家創始人?", a: "老子" }, { q: "漢初統治思想?", a: "無為而治" }, { q: "主張逍遙?", a: "莊子" },
+        { q: "主張非攻兼愛的簬派?", a: "墨家" }, { q: "法家集大成者?", a: "韓非" }, { q: "分封是以哪種關係維繫?", a: "血緣" },
+        { q: "皇帝自稱?", a: "朕" }, { q: "秦代中央官制?", a: "三公九卿" }, { q: "秦代地方制度?", a: "郡縣制" },
+        { q: "秦統一文字?", a: "小篆" }, { q: "秦統一貨幣?", a: "半兩錢" }, { q: "秦箝制思想方法?", a: "焚書坑儒" },
+        { q: "秦北伐匈奴將領?", a: "蒙恬" }, { q: "防禦匈奴建設?", a: "長城" }, { q: "秦末起義?", a: "陳勝吳廣" },
+        { q: "指鹿為馬?", a: "趙高" }, { q: "漢朝開國者?", a: "劉邦" }, { q: "景帝削藩結果?", a: "七國之亂" },
+        { q: "漢初對匈奴政策?", a: "和親" }, { q: "漢初盛世?", a: "文景之治" }, { q: "漢武削弱藩國方法?", a: "推恩令" },
+        { q: "漢代選官制度?", a: "察舉制" }, { q: "出使西域?", a: "張騫" }, { q: "絲綢之路起點?", a: "長安" },
+        { q: "史記體例?", a: "紀傳體" }, { q: "漢武財產徵稅?", a: "算緡" }, { q: "王莽建立?", a: "新朝" },
+        { q: "漢武打擊商人操控物價之法?", a: "平準法" }, { q: "漢武專賣被批評?", a: "與民爭利" },
+        { q: "安漢公?", a: "王莽" }, { q: "黃巾之亂領袖?", a: "張角" }, { q: "外戚擔任之高職?", a: "大司馬大將軍" },
+        { q: "信任王莽的太后?", a: "王政君" }, { q: "致三國鼎立之役?", a: "赤壁之戰" }, { q: "三國?", a: "魏蜀吳" },
+        { q: "黃巾口號?", a: "蒼天已死" }, { q: "蜀漢丞相?", a: "諸葛亮" }, { q: "建立西晉?", a: "司馬炎" },
+        { q: "西晉動亂?", a: "八王之亂" }, { q: "五胡十六國亂局?", a: "永嘉之亂" }, { q: "推行漢化改革者?", a: "孝文帝" },
+        { q: "孝文帝推祟?", a: "孝" }, { q: "北魏民族?", a: "鮮卑" }, { q: "北魏舊都?", a: "平城" }, { q: "北魏遷都?", a: "洛陽" },
+        { q: "北魏按職取俸之制?", a: "班祿制" }, { q: "上品無寒門?", a: "下品無世族" }, { q: "北魏動亂?", a: "六鎮兵變" },
+        { q: "世族取得政治特權之制?", a: "九品中正制" }, { q: "世族擁大量土地之制?", a: "占田令" }, { q: "王與馬?", a: "共天下" },
+        { q: "隋朝建立者?", a: "楊堅" }, { q: "隋文帝治績?", a: "開皇之治" }, { q: "隋文帝所開運河?", a: "廣通渠" },
+        { q: "隋「刑綱簡要」的法律?", a: "開皇律" }, { q: "隋大規模整頓戶籍?", a: "大索貌閱" }, { q: "按戶等徵稅?", a: "輸籍法" },
+        { q: "唐高祖是?", a: "李淵" }, { q: "唐初政變?", a: "玄武門之變" }, { q: "唐太宗治績?", a: "貞觀之治" },
+        { q: "外族稱太宗為?", a: "天可汗" }, { q: "唐直諫名臣?", a: "魏徵" }, { q: "形容唐初兩位名臣的成語?", a: "房謀杜斷" },
+        { q: "唐和親吐蕃公主?", a: "文成公主" }, { q: "唐女皇帝?", a: "武則天" }, { q: "唐玄宗治績?", a: "開元之治" },
+        { q: "口蜜腹劍?", a: "李林甫" }, { q: "三鎮節度使?", a: "安祿山" }, { q: "唐代轉捩點?", a: "安史之亂" },
+        { q: "借哪外族兵平安史之亂?", a: "回紇" }, { q: "十大兵鎮危機?", a: "外重內輕" }, { q: "安史亂後政局?", a: "藩鎮割據" },
+        { q: "助唐肅宗得位?", a: "李輔國" }, { q: "李輔國身分?", a: "宦官" }, { q: "牛黨代表?", a: "牛僧孺" },
+        { q: "李黨代表?", a: "李德裕" }, { q: "唐末民變?", a: "黃巢之亂" }, { q: "篡唐節度使?", a: "朱溫" },
+        { q: "專橫藩鎮?", a: "河北三鎮" }, { q: "唐亡政局?", a: "五代十國" }, { q: "陳橋兵變又名?", a: "黃袍加身" },
+        { q: "宋太祖?", a: "趙匡胤" }, { q: "宴會奪回兵權?", a: "杯酒釋兵權" }, { q: "強中央弱地方?", a: "強榦弱枝" },
+        { q: "五代政風?", a: "武人專政" }, { q: "慶曆新政主持者?", a: "范仲淹" }, { q: "熙寧變法主持者?", a: "王安石" },
+        { q: "分割宋相軍權?", a: "樞密使" }, { q: "分割宋相財權?", a: "三司使" }, { q: "宋代副相?", a: "參知政事" },
+        { q: "靖康之難?", a: "金滅北宋" }, { q: "監察知州?", a: "通判" }, { q: "盡忠報國?", a: "岳飛" },
+        { q: "梁唐晉漢周?", a: "五代" }, { q: "宋代監察機構?", a: "台諫" }, { q: "帥、漕、憲、倉?", a: "四監司" },
+        { q: "宋中央軍隊?", a: "禁軍" }, { q: "宋地方軍隊?", a: "廂軍" }, { q: "收地方權官員?", a: "轉運使" },
+        { q: "宋地方三級制?", a: "路州縣" }, { q: "宋代施政效能低下原因?", a: "政出多門" }, { q: "宋統兵訓練機關?", a: "三衙" },
+        { q: "宋每年向外族輸?", a: "歲幣" }, { q: "宋代的真宰相是?", a: "中書門下" }, { q: "建立元的種族?", a: "蒙古" },
+        { q: "元代地方長官?", a: "達魯花赤" }, { q: "元朝首都?", a: "大都" }, { q: "元行省實際長官?", a: "平章政事" },
+        { q: "明開國君主?", a: "朱元璋" }, { q: "明宰相機關?", a: "中書省" }, { q: "明特務機構?", a: "錦衣衛" },
+        { q: "明燕王?", a: "朱棣" }, { q: "明成祖遷都?", a: "北京" }, { q: "七下西洋?", a: "鄭和" },
+        { q: "廢相案件?", a: "胡惟庸" }, { q: "跪下奏事?", a: "跪對" }, { q: "明清以言入罪?", a: "文字獄" },
+        { q: "成祖時增設的特務?", a: "東廠" }, { q: "成祖政變?", a: "靖難之變" }, { q: "明宦官以小條提供意見?", a: "票擬" },
+        { q: "明宦官代帝批閱奏章?", a: "批紅" }, { q: "沉迷木工玩意之明君?", a: "明熹宗" }, { q: "明宦官通曉文墨之處?", a: "內書堂" },
+        { q: "明削藩君主?", a: "明惠帝" }, { q: "明監察百官部門?", a: "都察院" }, { q: "明廢除的官員?", a: "宰相" },
+        { q: "太祖規定哪些人不能干預政事?", a: "內臣" }, { q: "廢相初期協助君主之官員?", a: "四輔官" },
+        { q: "明太祖出身?", a: "平民" }, { q: "明太祖性格?", a: "猜忌多疑" }, { q: "清處理藩部部門?", a: "理藩院" },
+        { q: "土司官不再世襲?", a: "改土歸流" }, { q: "分化蒙族制度?", a: "盟旗制" }, { q: "創八旗兵制?", a: "努爾哈赤" },
+        { q: "康熙決策機關?", a: "南書房" }, { q: "雍正設立?", a: "軍機處" }, { q: "用其力而絕其智?", a: "蒙古族" },
+        { q: "乾隆修書?", a: "四庫全書" }, { q: "軍機處密令?", a: "廷寄" }, { q: "喇嘛教領袖?", a: "達賴喇嘛" },
+        { q: "崇其教而抑其政?", a: "藏族" }, { q: "輕其教而離其人?", a: "回族" }
+    ];
+
+    const rawBossQuestions = [
+        { q: "西周亂事?", a: "三監之亂" }, { q: "導致王命不行?", a: "平王東遷" }, { q: "集法家之大成者?", a: "韓非" },
+        { q: "秦代負責監察百官的官職?", a: "御史大夫" }, { q: "漢武帝設立監督地方官的職位?", a: "刺史" },
+        { q: "漢代由地方推薦人才的制度?", a: "察舉制" }, { q: "「？，獨尊儒術」", a: "罷黜百家" },
+        { q: "漢武針對商人的經濟改革?", a: "新經濟政策" }, { q: "九品中正制選拔標準變成只重?", a: "家世" },
+        { q: "漢武封禪的地方?", a: "泰山" }, { q: "北魏將皇室姓氏拓跋改為?", a: "元" }, { q: "漢武晚年改過的証據?", a: "輪台罪己詔" },
+        { q: "唐朝負責政令審核的機構?", a: "門下省" }, { q: "唐朝負責執行政令的機構?", a: "尚書省" },
+        { q: "唐初田制精神?", a: "授田予民為民制產" }, { q: "唐初兵制精神?", a: "兵農合一" }, /* 修正 2 */
+        { q: "石敬瑭割讓?", a: "燕雲十六州" },
+        { q: "宋防武將專權之策?", a: "更戍法" }, { q: "更戌法弊病?", a: "兵不知將將不知兵" }, { q: "宋代三司?", a: "鹽鐵度支戶部" },
+        { q: "行中書省特色?", a: "強而不專" }, { q: "通判擁有的權力?", a: "副署" }, { q: "宋真宗與遼簽訂?", a: "澶淵之盟" },
+        { q: "三冗?", a: "冗官冗兵冗費" },
+        { q: "明「三司」?", a: "承宣布政使司" }, { q: "明編定的大量案例?", a: "大誥" }, { q: "明清科舉格式?", a: "八股文" },
+        { q: "監察六部官員?", a: "六科給事中" }, { q: "雍正中樞決策機關?", a: "軍機處" }, { q: "清入關前決策機關?", a: "議政王大臣會議" },
+        { q: "清初漢人動亂?", a: "三藩之亂" }, { q: "莊廷鍵?", a: "明史案" }, { q: "戴名世?", a: "南山案" },
+        { q: "置正大光明匾後?", a: "密儲" }, { q: "清初生產及軍事組織?", a: "八旗" }, { q: "康熙最專橫輔臣?", a: "鰲拜" }
+    ];
+
+    const questions = rawQuestions.map(i => ({ q: i.q.trim(), a: i.a.trim() }));
+    const bossQuestions = rawBossQuestions.map(i => ({ q: i.q.trim(), a: i.a.trim() }));
+    
+    const recentQuestions = [];
+
+    const bgList = ["bg_gate.webp", "bg_garden.webp", "bg_bridge.webp", "bg_inn.webp"];
+    const bgColors = ["linear-gradient(#553300, #111)", "linear-gradient(#003300, #111)", "linear-gradient(#223344, #111)", "linear-gradient(#441100, #111)"];
+    const bgBoss = "bg_hell.webp";
+    const bgBossColor = "radial-gradient(circle, #400 0%, #000 90%)";
+
+    const state = {
+        running: false, score: 0, hp: 100, 
+        enemies: [], 
+        bossPhase: false, bossHp: 200, bossMax: 200,
+        killCount: 0, bossTrigger: 20, 
+        speed: 0.6,
+        bgIndex: 0, bgTimer: 0,
+        skills: { q: true, w: true, e: true, r: true },
+        frozen: false,
+        lockedTarget: null,
+        combo: 0,
+        comboHideTimer: null // Combo 隱藏計時器
+    };
+
+    const enemyTypes = [
+        { type: 'normal',   img: 'enemy_1.webp', hp: 1 },
+        { type: 'rusher',   img: 'enemy_2.webp', hp: 1 },
+        { type: 'ghost',    img: 'enemy_3.webp', hp: 1 }, 
+        { type: 'shield',   img: 'enemy_5.webp', hp: 2 }, 
+        { type: 'silencer', img: 'enemy_4.webp', hp: 1 }  
+    ];
+
+    const lanes = [-30, 0, 30]; 
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = new AudioContext();
+    function playTone(freq, type) {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = type; o.frequency.value = freq;
+        g.gain.value = 0.1; g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(); o.stop(audioCtx.currentTime + 0.1);
+    }
+    const Sound = {
+        hit: () => playTone(400, 'square'),
+        hurt: () => playTone(150, 'sawtooth'),
+        win: () => playTone(600, 'sine'),
+        skill: () => playTone(800, 'triangle'),
+        break: () => playTone(200, 'square'), 
+        shoot: () => playTone(600, 'square'),
+        steal: () => playTone(300, 'sawtooth')
+    };
+
+    function showDifficulty() {
+        document.getElementById('intro-screen').classList.add('hidden');
+        document.getElementById('difficulty-screen').classList.remove('hidden');
+    }
+
+    function startGame(diff) {
+        if (diff === 'easy') state.speed = 0.25;
+        else if (diff === 'normal') state.speed = 0.5;
+        else state.speed = 0.9;
+
+        document.getElementById('difficulty-screen').classList.add('hidden');
+        
+        state.running = true; state.score = 0; state.hp = 100; state.enemies = [];
+        state.bossPhase = false; state.killCount = 0; state.bgIndex = 0; state.bgTimer = 0;
+        state.frozen = false;
+        state.lockedTarget = null;
+        state.combo = 0; updateComboUI();
+        
+        ['q','w','e','r'].forEach(k => {
+            state.skills[k] = true;
+            document.getElementById(`skill-${k}`).classList.add('skill-ready');
+            document.getElementById(`cd-${k}`).style.height = '0%';
+        });
+
+        changeBackground(0);
+        document.getElementById('boss-entity').style.opacity = 0;
+        document.getElementById('boss-entity').style.transform = "translate(-50%, -50%) translateZ(-600px)";
+        const input = document.getElementById('player-input');
+        input.value = '';
+        input.focus();
+        input.classList.remove('input-locked');
+        
+        updateBossProgress();
+        spawnEnemy(); 
+        requestAnimationFrame(gameLoop);
+    }
+
+    function gameLoop() {
+        if (!state.running) return;
+
+        if (!state.bossPhase) {
+            state.bgTimer++;
+            if (state.bgTimer > 900) { 
+                state.bgTimer = 0;
+                state.bgIndex = (state.bgIndex + 1) % bgList.length;
+                changeBackground(state.bgIndex);
+                document.getElementById('bg-index').innerText = (state.bgIndex + 1);
+            }
+
+            if (state.killCount >= state.bossTrigger) {
+                if (state.enemies.length === 0) enterBossPhase();
+            } else {
+                if (state.enemies.length < 3 && Math.random() < 0.02) spawnEnemy();
+                if (state.enemies.length === 0) spawnEnemy();
+            }
+        } else {
+            if (state.enemies.length < 2 && Math.random() < 0.03) spawnEnemy(true);
+        }
+
+        const toRemove = [];
+        state.enemies.forEach(e => {
+            if (e.dead) return; 
+            
+            if (!state.frozen) e.z -= e.speed;
+
+            let scale = 600 / (e.z + 400); 
+            if (scale < 0) scale = 0;
+            
+            e.el.style.transform = `translate(-50%, -50%) scale(${scale})`;
+            e.el.style.zIndex = Math.floor(600 - e.z);
+
+            let perspectiveFactor = (600 / (e.z + 600)); 
+            let viewX = 50 + (e.lane * perspectiveFactor);
+            e.el.style.left = viewX + "%";
+            let viewY = 40 + (e.y * perspectiveFactor * 0.5); 
+            e.el.style.top = viewY + "%";
+
+            if (e.z <= 0) {
+                if (e.type === 'shield') {
+                    loseScore(300);
+                } else {
+                    takeDamage(15);
+                }
+
+                if(e.type==='ghost') triggerBlindness();
+                if(e.type==='silencer') triggerSilence();
+                toRemove.push(e);
+            }
+        });
+
+        toRemove.forEach(e => removeEnemy(e));
+        requestAnimationFrame(gameLoop);
+    }
+
+    function spawnEnemy(isBossProjectile = false) {
+        let availableLanes = lanes.filter(lane => !state.enemies.some(e => e.lane === lane && e.z > 400));
+        
+        if (availableLanes.length === 0 && !isBossProjectile) {
+            if(state.enemies.length < 3) availableLanes = lanes; 
+            else return; 
+        }
+
+        let chosenLane = isBossProjectile ? lanes[Math.floor(Math.random() * lanes.length)] : availableLanes[Math.floor(Math.random() * availableLanes.length)];
+        
+        const pool = isBossProjectile ? bossQuestions : questions;
+        let qData;
+        let attempts = 0;
+        do {
+            qData = pool[Math.floor(Math.random() * pool.length)];
+            attempts++;
+        } while (recentQuestions.includes(qData.q) && attempts < 10);
+        
+        recentQuestions.push(qData.q);
+        if(recentQuestions.length > 5) recentQuestions.shift();
+
+        let typeInfo = enemyTypes[0]; 
+        if (!isBossProjectile) {
+            const r = Math.random();
+            if (r < 0.15) typeInfo = enemyTypes[4]; 
+            else if (r < 0.3) typeInfo = enemyTypes[3]; 
+            else if (r < 0.45) typeInfo = enemyTypes[2]; 
+            else if (r < 0.65) typeInfo = enemyTypes[1]; 
+        }
+
+        const el = document.createElement('div');
+        el.className = 'enemy';
+        if(typeInfo.type === 'shield') el.classList.add('shielded');
+        if(typeInfo.type === 'ghost') el.classList.add('ghost');
+
+        let backupIcon = '🧟';
+        if(isBossProjectile) backupIcon = '🔥';
+        else if(typeInfo.type==='rusher') backupIcon = '🐎';
+        else if(typeInfo.type==='ghost') backupIcon = '👻';
+        else if(typeInfo.type==='shield') backupIcon = '🛡️';
+        else if(typeInfo.type==='silencer') backupIcon = '😶';
+
+        // 生成血條格子
+        let hpBlocksHTML = '';
+        for(let i=0; i<qData.a.length; i++) {
+            hpBlocksHTML += '<div class="hp-block"></div>';
+        }
+
+        el.innerHTML = `
+            <div class="enemy-hp-container">${hpBlocksHTML}</div>
+            <div class="enemy-box">
+                <div class="q-text">${qData.q}</div>
+                <div class="answer-hint">${qData.a}</div>
+            </div>
+            <img src="${isBossProjectile ? 'projectile.webp' : typeInfo.img}" class="enemy-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <div style="font-size:100px; display:none; filter:drop-shadow(0 0 5px #000);">${backupIcon}</div>
+        `;
+        document.getElementById('scene-layer').appendChild(el);
+
+        state.enemies.push({
+            id: Date.now() + Math.random(),
+            lane: chosenLane, 
+            y: isBossProjectile ? -10 : 0,    
+            z: 600,           
+            speed: isBossProjectile ? state.speed * 1.5 : state.speed * (typeInfo.type==='rusher'?1.5:1),
+            hp: isBossProjectile ? 1 : typeInfo.hp,
+            currentInput: "", 
+            data: qData,
+            el: el,
+            type: isBossProjectile ? 'projectile' : typeInfo.type,
+            dead: false
+        });
+    }
+
+    function removeEnemy(e) {
+        state.enemies = state.enemies.filter(en => en.id !== e.id);
+        if (e.el && e.el.parentNode) e.el.parentNode.removeChild(e.el);
+        if (state.lockedTarget === e.id) {
+            state.lockedTarget = null;
+            document.getElementById('player-input').classList.remove('input-locked');
+        }
+    }
+
+    // --- 打字邏輯 ---
+    document.getElementById('player-input').addEventListener('input', (e) => {
+        if (!state.running) return;
+        const inputVal = e.target.value.trim();
+        
+        if (inputVal === "") {
+            state.lockedTarget = null;
+            document.getElementById('player-input').classList.remove('input-locked');
+            state.enemies.forEach(en => updateEnemyBlocks(en, ""));
+            return;
+        }
+
+        let target = null;
+        if (state.lockedTarget) {
+            target = state.enemies.find(en => en.id === state.lockedTarget);
+            if (!target || target.dead) {
+                state.lockedTarget = null;
+                document.getElementById('player-input').classList.remove('input-locked');
+                target = null;
+            } else if (!target.data.a.startsWith(inputVal)) {
+                 shakeScreen();
+                 resetCombo(); 
+                 e.target.value = "";
+                 state.lockedTarget = null;
+                 document.getElementById('player-input').classList.remove('input-locked');
+                 updateEnemyBlocks(target, "");
+                 return;
+            }
+        }
+
+        if (!target) {
+            const candidates = state.enemies.filter(en => !en.dead && en.data.a.startsWith(inputVal));
+            if (candidates.length > 0) {
+                candidates.sort((a,b) => a.z - b.z);
+                target = candidates[0];
+                state.lockedTarget = target.id;
+                document.getElementById('player-input').classList.add('input-locked');
+                state.enemies.forEach(en => { if(en.id !== target.id) updateEnemyBlocks(en, ""); });
+            } else {
+                shakeScreen();
+                resetCombo(); 
+                e.target.value = "";
+                return;
+            }
+        }
+
+        if (target) {
+            shootBeam(target); 
+            Sound.shoot();
+            updateEnemyBlocks(target, inputVal); 
+            
+            // 強力擊退 (Knockback)
+            target.z += 100;
+
+            if (inputVal === target.data.a) {
+                handleKill(target);
+                e.target.value = ""; 
+                state.lockedTarget = null;
+                document.getElementById('player-input').classList.remove('input-locked');
+            }
+        }
+    });
+
+    function updateEnemyBlocks(enemy, currentVal) {
+        const blocks = enemy.el.querySelectorAll('.hp-block');
+        const typedLen = currentVal.length;
+        
+        blocks.forEach((blk, idx) => {
+            if (idx < typedLen) blk.classList.add('depleted');
+            else blk.classList.remove('depleted');
+        });
+        
+        if (state.lockedTarget === enemy.id) {
+            enemy.el.classList.add('enemy-locked');
+        } else {
+            enemy.el.classList.remove('enemy-locked');
+        }
+    }
+
+    function shootBeam(targetEnemy) {
+        const inputRect = document.getElementById('player-input').getBoundingClientRect();
+        const startX = inputRect.left + inputRect.width / 2;
+        const startY = inputRect.top;
+
+        const beam = document.createElement('div');
+        beam.className = 'projectile';
+        document.getElementById('fx-layer').appendChild(beam);
+
+        beam.style.left = startX + 'px';
+        beam.style.top = startY + 'px';
+
+        const enemyLeft = parseFloat(targetEnemy.el.style.left) / 100 * window.innerWidth;
+        const enemyTop = parseFloat(targetEnemy.el.style.top) / 100 * window.innerHeight;
+
+        void beam.offsetWidth;
+
+        beam.style.transform = `translate(${enemyLeft - startX}px, ${enemyTop - startY}px) scale(0.5)`;
+        beam.style.opacity = '0'; 
+
+        setTimeout(() => {
+            if(beam.parentNode) beam.parentNode.removeChild(beam);
+            targetEnemy.el.classList.add('hit-red');
+            setTimeout(() => targetEnemy.el.classList.remove('hit-red'), 100);
+        }, 100);
+    }
+
+    function shakeScreen() {
+        const container = document.getElementById('game-container');
+        container.classList.remove('shake');
+        void container.offsetWidth;
+        container.classList.add('shake');
+        Sound.hurt(); 
+    }
+
+    function handleKill(e) {
+        if (e.type === 'shield' && e.el.classList.contains('shielded')) {
+            Sound.break();
+            e.el.classList.remove('shielded');
+            showStatus("破盾！");
+            updateEnemyBlocks(e, ""); 
+            return; 
+        }
+
+        e.dead = true;
+        Sound.hit();
+        
+        state.combo++;
+        updateComboUI();
+        
+        state.score += 100 + (state.combo * 10);
+        updateUI();
+        
+        if (e.type !== 'projectile') {
+            state.killCount++;
+            updateBossProgress(); 
+        } else {
+            damageBoss(15);
+        }
+        
+        e.el.classList.add('dying');
+        
+        setTimeout(() => {
+            if (e.el && e.el.parentNode) e.el.parentNode.removeChild(e.el);
+            removeEnemy(e);
+        }, 300);
+    }
+
+    // 修正：Combo UI 自動消失邏輯
+    function updateComboUI() {
+        const el = document.getElementById('combo-display');
+        
+        if (state.combo > 1) {
+            el.innerText = "連擊 x " + state.combo;
+            
+            // 每次連擊重置計時器
+            if (state.comboHideTimer) clearTimeout(state.comboHideTimer);
+            
+            // 顯示動畫
+            el.classList.remove('combo-visible');
+            el.classList.remove('combo-pop');
+            void el.offsetWidth; // trigger reflow
+            el.classList.add('combo-visible');
+            el.classList.add('combo-pop');
+            setTimeout(() => el.classList.remove('combo-pop'), 200);
+
+            // 設置 2 秒後淡出
+            state.comboHideTimer = setTimeout(() => {
+                el.classList.remove('combo-visible');
+            }, 2000);
+        } else {
+            // Combo < 2 不顯示
+            el.classList.remove('combo-visible');
+        }
+    }
+
+    function resetCombo() {
+        state.combo = 0;
+        updateComboUI();
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (!state.running) return;
+        if (['q','w','e','r'].includes(e.key.toLowerCase())) {
+            useSkill(e.key.toLowerCase());
+        }
+    });
+
+    function useSkill(key) {
+        if (!state.skills[key]) return; 
+
+        if (key === 'q') { 
+            showStatus("滅！");
+            triggerFlash();
+            state.enemies.forEach(e => {
+                if(!e.dead) handleKill(e);
+            });
+            startCooldown('q', 15); 
+        }
+        else if (key === 'w') { 
+            showStatus("定！");
+            state.frozen = true;
+            document.getElementById('bg-layer').style.filter = "grayscale(100%)"; 
+            setTimeout(() => {
+                state.frozen = false;
+                document.getElementById('bg-layer').style.filter = "none";
+            }, 5000); 
+            startCooldown('w', 20);
+        }
+        else if (key === 'e') { 
+            showStatus("示！");
+            state.enemies.forEach(en => {
+                const hint = en.el.querySelector('.answer-hint');
+                if(hint) hint.style.opacity = 1;
+            });
+            setTimeout(() => {
+                state.enemies.forEach(en => {
+                    const hint = en.el.querySelector('.answer-hint');
+                    if(hint) hint.style.opacity = 0;
+                });
+            }, 5000); 
+            startCooldown('e', 10);
+        }
+        else if (key === 'r') { 
+            state.hp = Math.min(state.hp + 30, 100);
+            updateUI();
+            showStatus("癒！");
+            startCooldown('r', 25);
+        }
+    }
+
+    function startCooldown(key, seconds) {
+        state.skills[key] = false;
+        const btn = document.getElementById(`skill-${key}`);
+        const cdOverlay = document.getElementById(`cd-${key}`);
+        btn.classList.remove('skill-ready');
+        cdOverlay.style.height = '100%';
+        cdOverlay.style.transition = `height ${seconds}s linear`;
+        requestAnimationFrame(() => { cdOverlay.style.height = '0%'; });
+        setTimeout(() => {
+            state.skills[key] = true;
+            btn.classList.add('skill-ready');
+        }, seconds * 1000);
+    }
+
+    function updateBossProgress() {
+        const remaining = Math.max(0, state.bossTrigger - state.killCount);
+        const text = state.bossPhase ? "Boss 戰鬥中！" : `距離 Boss: 尚餘 ${remaining} 隻`;
+        document.getElementById('boss-progress').innerText = text;
+    }
+
+    function triggerFlash() {
+        const f = document.getElementById('skill-flash');
+        f.classList.add('flash-active');
+        setTimeout(() => f.classList.remove('flash-active'), 300);
+    }
+    
+    function triggerBlindness() {
+        const ink = document.getElementById('ink-blindness');
+        ink.classList.add('blind-active');
+        showStatus("潑墨致盲！");
+        setTimeout(() => ink.classList.remove('blind-active'), 3000);
+    }
+
+    function triggerSilence() {
+        const input = document.getElementById('player-input');
+        input.classList.add('silenced');
+        input.disabled = true;
+        input.value = "";
+        input.placeholder = "!!! 禁言封口 !!!";
+        showStatus("禁言封口！");
+        setTimeout(() => {
+            input.classList.remove('silenced');
+            input.disabled = false;
+            input.placeholder = "在此題字...";
+            input.focus();
+        }, 2000);
+    }
+
+    function showStatus(msg) {
+        const el = document.getElementById('status-msg');
+        el.innerText = msg;
+        el.style.opacity = 1;
+        setTimeout(() => el.style.opacity = 0, 1500);
+    }
+
+    function takeDamage(amt) {
+        shakeScreen(); 
+        resetCombo();
+        state.hp -= amt;
+        document.getElementById('damage-flash').classList.add('flash-active'); 
+        setTimeout(() => document.getElementById('damage-flash').classList.remove('flash-active'), 150);
+        updateUI();
+        if (state.hp <= 0) gameOver("史觀崩壞", false);
+    }
+
+    function loseScore(amt) {
+        state.score = Math.max(0, state.score - amt);
+        updateUI();
+        Sound.steal();
+        showStatus("功績被奪！");
+        shakeScreen(); 
+        resetCombo();
+    }
+
+    function changeBackground(index) {
+        const bgLayer = document.getElementById('bg-layer');
+        bgLayer.style.opacity = 0; 
+        setTimeout(() => {
+            const imgUrl = `url('${bgList[index]}')`;
+            const backupColor = bgColors[index];
+            bgLayer.style.backgroundImage = `${imgUrl}, ${backupColor}`;
+            bgLayer.classList.remove('bg-anim');
+            void bgLayer.offsetWidth; 
+            bgLayer.classList.add('bg-anim');
+            bgLayer.style.opacity = 1; 
+        }, 500); 
+    }
+
+    function enterBossPhase() {
+        state.bossPhase = true;
+        updateBossProgress();
+        const bgLayer = document.getElementById('bg-layer');
+        bgLayer.style.opacity = 0;
+        setTimeout(() => {
+            bgLayer.style.backgroundImage = `url('${bgBoss}'), ${bgBossColor}`;
+            bgLayer.classList.add('bg-anim');
+            bgLayer.style.opacity = 1;
+        }, 500);
+        const boss = document.getElementById('boss-entity');
+        boss.style.opacity = 1;
+        boss.style.transform = "translate(-50%, -50%) translateZ(0px)"; 
+        
+        state.enemies.forEach(e => {
+            if (e.el && e.el.parentNode) e.el.parentNode.removeChild(e.el);
+        });
+        state.enemies = [];
+        state.lockedTarget = null;
+        
+        document.getElementById('player-input').placeholder = "擊碎饕餮的謬論！";
+        showStatus("魔獸降臨！");
+    }
+
+    function damageBoss(val) {
+        state.bossHp -= val;
+        document.getElementById('boss-hp-fill').style.width = (state.bossHp / state.bossMax * 100) + "%";
+        if (state.bossHp <= 0) gameOver("饕餮封印", true);
+    }
+
+    function updateUI() {
+        document.getElementById('score').innerText = state.score;
+        document.getElementById('hp-fill').style.width = state.hp + "%";
+    }
+
+    function saveScore(score) {
+        let scores = JSON.parse(localStorage.getItem('mofa_scores') || '[]');
+        scores.push({ date: new Date().toLocaleDateString(), score: score });
+        scores.sort((a, b) => b.score - a.score);
+        scores = scores.slice(0, 5); 
+        localStorage.setItem('mofa_scores', JSON.stringify(scores));
+    }
+
+    function renderLeaderboard() {
+        const scores = JSON.parse(localStorage.getItem('mofa_scores') || '[]');
+        const tbody = document.getElementById('leaderboard-body');
+        tbody.innerHTML = scores.map((s, i) => `<tr><td>${i+1}</td><td>${s.date}</td><td>${s.score}</td></tr>`).join('');
+    }
+
+    function gameOver(reason, win) {
+        state.running = false;
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        
+        saveScore(state.score);
+        renderLeaderboard();
+
+        if (win) {
+            document.getElementById('victory-scroll').classList.remove('hidden');
+            document.getElementById('end-title').innerText = "天下大治";
+            document.getElementById('end-title').style.color = "var(--gold)";
+        } else {
+            document.getElementById('victory-scroll').classList.add('hidden');
+            document.getElementById('end-title').innerText = "史冊盡毀";
+            document.getElementById('end-title').style.color = "var(--cinnabar)";
+        }
+
+        document.getElementById('end-reason').innerText = reason;
+        document.getElementById('final-score').innerText = state.score;
+        Sound.win();
+    }
+</script>
+<div id="damage-flash" style="position:fixed;top:0;left:0;width:100%;height:100%;box-shadow:inset 0 0 50px red;pointer-events:none;opacity:0;transition:opacity 0.1s;"></div>
+</body>
+</html>
