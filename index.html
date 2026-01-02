@@ -338,12 +338,12 @@
     </div>
 
 <script>
-    // 題庫 (已修正)
+    // 題庫 (已包含不重複邏輯)
     const rawQuestions = [
         { q: "人文初祖?", a: "黃帝" }, { q: "治水三過家門而不入?", a: "大禹" }, { q: "傳說中射日英雄?", a: "后羿" }, 
         { q: "中國第一個王朝?", a: "夏朝" }, { q: "商朝亡國暴君?", a: "紂王" }, { q: "誰人制禮作樂?", a: "周公" },
         { q: "周代政治制度?", a: "封建" }, { q: "周嫡庶繼承制度?", a: "宗法制" }, { q: "周土地制度?", a: "井田制" },
-        { q: "春秋五霸首霸?", a: "齊桓公" }, { q: "齊桓公宰相?", a: "管仲" }, { q: "霸主口號?", a: "尊王攘夷" }, /* 修正 1 */
+        { q: "春秋五霸首霸?", a: "齊桓公" }, { q: "齊桓公宰相?", a: "管仲" }, { q: "霸主口號?", a: "尊王攘夷" }, 
         { q: "天子到諸侯領地視察?", a: "巡狩" }, { q: "諸侯定期面見天子?", a: "朝覲" }, { q: "三家分晉，晉被分為?", a: "韓趙魏" },
         { q: "封建制下，天子以下的是?", a: "諸侯" }, { q: "諸侯公為哪五等?", a: "公侯百子男" }, { q: "儒家創始人?", a: "孔子" },
         { q: "孔子被稱為?", a: "萬世師表" }, { q: "主張性善", a: "孟子" }, { q: "主張性惡?", a: "荀子" },
@@ -404,7 +404,7 @@
         { q: "漢武針對商人的經濟改革?", a: "新經濟政策" }, { q: "九品中正制選拔標準變成只重?", a: "家世" },
         { q: "漢武封禪的地方?", a: "泰山" }, { q: "北魏將皇室姓氏拓跋改為?", a: "元" }, { q: "漢武晚年改過的証據?", a: "輪台罪己詔" },
         { q: "唐朝負責政令審核的機構?", a: "門下省" }, { q: "唐朝負責執行政令的機構?", a: "尚書省" },
-        { q: "唐初田制精神?", a: "授田予民為民制產" }, { q: "唐初兵制精神?", a: "兵農合一" }, /* 修正 2 */
+        { q: "唐初田制精神?", a: "授田予民為民制產" }, { q: "唐初兵制精神?", a: "兵農合一" }, 
         { q: "石敬瑭割讓?", a: "燕雲十六州" },
         { q: "宋防武將專權之策?", a: "更戍法" }, { q: "更戌法弊病?", a: "兵不知將將不知兵" }, { q: "宋代三司?", a: "鹽鐵度支戶部" },
         { q: "行中書省特色?", a: "強而不專" }, { q: "通判擁有的權力?", a: "副署" }, { q: "宋真宗與遼簽訂?", a: "澶淵之盟" },
@@ -418,7 +418,33 @@
     const questions = rawQuestions.map(i => ({ q: i.q.trim(), a: i.a.trim() }));
     const bossQuestions = rawBossQuestions.map(i => ({ q: i.q.trim(), a: i.a.trim() }));
     
-    const recentQuestions = [];
+    // ----------------------------------------------------------------
+    // 不重複洗牌邏輯
+    // ----------------------------------------------------------------
+    let deckQuestions = [];
+    let deckBossQuestions = [];
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    function getNextQuestion(isBoss) {
+        let deck = isBoss ? deckBossQuestions : deckQuestions;
+        let masterList = isBoss ? bossQuestions : questions;
+
+        if (deck.length === 0) {
+            deck = shuffleArray([...masterList]);
+            if (isBoss) deckBossQuestions = deck;
+            else deckQuestions = deck;
+        }
+
+        return deck.pop();
+    }
+    // ----------------------------------------------------------------
 
     const bgList = ["bg_gate.webp", "bg_garden.webp", "bg_bridge.webp", "bg_inn.webp"];
     const bgColors = ["linear-gradient(#553300, #111)", "linear-gradient(#003300, #111)", "linear-gradient(#223344, #111)", "linear-gradient(#441100, #111)"];
@@ -436,7 +462,8 @@
         frozen: false,
         lockedTarget: null,
         combo: 0,
-        comboHideTimer: null // Combo 隱藏計時器
+        comboHideTimer: null,
+        isComposing: false // 新增：檢測是否正在組字中
     };
 
     const enemyTypes = [
@@ -487,7 +514,11 @@
         state.frozen = false;
         state.lockedTarget = null;
         state.combo = 0; updateComboUI();
+        state.isComposing = false;
         
+        deckQuestions = [];
+        deckBossQuestions = [];
+
         ['f1','f2','f3','f4'].forEach(k => {
             state.skills[k] = true;
             document.getElementById(`skill-${k}`).classList.add('skill-ready');
@@ -574,16 +605,7 @@
 
         let chosenLane = isBossProjectile ? lanes[Math.floor(Math.random() * lanes.length)] : availableLanes[Math.floor(Math.random() * availableLanes.length)];
         
-        const pool = isBossProjectile ? bossQuestions : questions;
-        let qData;
-        let attempts = 0;
-        do {
-            qData = pool[Math.floor(Math.random() * pool.length)];
-            attempts++;
-        } while (recentQuestions.includes(qData.q) && attempts < 10);
-        
-        recentQuestions.push(qData.q);
-        if(recentQuestions.length > 5) recentQuestions.shift();
+        let qData = getNextQuestion(isBossProjectile);
 
         let typeInfo = enemyTypes[0]; 
         if (!isBossProjectile) {
@@ -606,7 +628,6 @@
         else if(typeInfo.type==='shield') backupIcon = '🛡️';
         else if(typeInfo.type==='silencer') backupIcon = '😶';
 
-        // 生成血條格子
         let hpBlocksHTML = '';
         for(let i=0; i<qData.a.length; i++) {
             hpBlocksHTML += '<div class="hp-block"></div>';
@@ -647,12 +668,35 @@
         }
     }
 
-    // --- 打字邏輯 ---
-    document.getElementById('player-input').addEventListener('input', (e) => {
+    // --- 修正後的輸入監聽 (支援倉頡/速成) ---
+    const inputEl = document.getElementById('player-input');
+
+    // 1. 當開始組字（出現選字框）時
+    inputEl.addEventListener('compositionstart', () => {
+        state.isComposing = true;
+    });
+
+    // 2. 當組字結束（選好字上屏）時
+    inputEl.addEventListener('compositionend', (e) => {
+        state.isComposing = false;
+        // 在這裡主動觸發一次處理邏輯，確保剛選好的字被處理
+        handleInput(e.target.value); 
+    });
+
+    // 3. 一般輸入監聽
+    inputEl.addEventListener('input', (e) => {
+        // 如果正在組字中，直接返回，不進行判錯邏輯
+        if (state.isComposing) return;
+        handleInput(e.target.value);
+    });
+
+    // 核心處理邏輯拆分出來
+    function handleInput(rawInput) {
         if (!state.running) return;
-        const inputVal = e.target.value.trim();
+        const inputVal = rawInput.trim();
         
         if (inputVal === "") {
+            // 如果刪空了，重置鎖定
             state.lockedTarget = null;
             document.getElementById('player-input').classList.remove('input-locked');
             state.enemies.forEach(en => updateEnemyBlocks(en, ""));
@@ -667,9 +711,12 @@
                 document.getElementById('player-input').classList.remove('input-locked');
                 target = null;
             } else if (!target.data.a.startsWith(inputVal)) {
+                 // 這裡也需要保護：如果是因為還在打字中導致的不匹配，不應該懲罰
+                 // 但因為 input 事件在 composing 時已被攔截，這裡接收到的應該是完整的字
+                 
                  shakeScreen();
                  resetCombo(); 
-                 e.target.value = "";
+                 inputEl.value = ""; // 清空錯誤輸入
                  state.lockedTarget = null;
                  document.getElementById('player-input').classList.remove('input-locked');
                  updateEnemyBlocks(target, "");
@@ -677,6 +724,7 @@
             }
         }
 
+        // 如果沒有鎖定目標，尋找新目標
         if (!target) {
             const candidates = state.enemies.filter(en => !en.dead && en.data.a.startsWith(inputVal));
             if (candidates.length > 0) {
@@ -686,29 +734,31 @@
                 document.getElementById('player-input').classList.add('input-locked');
                 state.enemies.forEach(en => { if(en.id !== target.id) updateEnemyBlocks(en, ""); });
             } else {
+                // 找不到任何匹配
                 shakeScreen();
                 resetCombo(); 
-                e.target.value = "";
+                inputEl.value = "";
                 return;
             }
         }
 
+        // 攻擊邏輯
         if (target) {
             shootBeam(target); 
             Sound.shoot();
             updateEnemyBlocks(target, inputVal); 
             
-            // 強力擊退 (Knockback)
-            target.z += 100;
+            target.z += 100; // 擊退
 
+            // 檢查是否完全擊殺
             if (inputVal === target.data.a) {
                 handleKill(target);
-                e.target.value = ""; 
+                inputEl.value = ""; 
                 state.lockedTarget = null;
                 document.getElementById('player-input').classList.remove('input-locked');
             }
         }
-    });
+    }
 
     function updateEnemyBlocks(enemy, currentVal) {
         const blocks = enemy.el.querySelectorAll('.hp-block');
@@ -794,30 +844,25 @@
         }, 300);
     }
 
-    // 修正：Combo UI 自動消失邏輯
     function updateComboUI() {
         const el = document.getElementById('combo-display');
         
         if (state.combo > 1) {
             el.innerText = "連擊 x " + state.combo;
             
-            // 每次連擊重置計時器
             if (state.comboHideTimer) clearTimeout(state.comboHideTimer);
             
-            // 顯示動畫
             el.classList.remove('combo-visible');
             el.classList.remove('combo-pop');
-            void el.offsetWidth; // trigger reflow
+            void el.offsetWidth;
             el.classList.add('combo-visible');
             el.classList.add('combo-pop');
             setTimeout(() => el.classList.remove('combo-pop'), 200);
 
-            // 設置 2 秒後淡出
             state.comboHideTimer = setTimeout(() => {
                 el.classList.remove('combo-visible');
             }, 2000);
         } else {
-            // Combo < 2 不顯示
             el.classList.remove('combo-visible');
         }
     }
