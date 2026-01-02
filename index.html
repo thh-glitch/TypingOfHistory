@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>墨伐春秋：鎮魔錄 </title>
+    <title>墨伐春秋：鎮魔錄 (修復版)</title>
     <link href="https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -49,7 +49,7 @@
         }
         .flash-active { opacity: 1 !important; }
 
-        /* Combo 顯示 (增加過渡效果) */
+        /* Combo 顯示 */
         #combo-display {
             position: absolute; top: 20%; left: 5%;
             font-family: 'Zhi Mang Xing'; font-size: 80px; color: var(--gold);
@@ -113,7 +113,7 @@
             position: relative; overflow: hidden; cursor: pointer; display: flex; justify-content: center; align-items: center; 
             font-family: 'Zhi Mang Xing'; font-size: 28px; color: #666; transition: 0.2s; 
         }
-        .skill-key { position: absolute; top: 2px; left: 5px; font-size: 12px; font-family: sans-serif; color: #888; }
+        .skill-key { position: absolute; top: 2px; left: 5px; font-size: 14px; font-family: sans-serif; color: #fff; font-weight: bold; }
         .skill-cooldown { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: rgba(0,0,0,0.8); transition: height 0.1s; z-index: 2; }
         .skill-ready { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 10px var(--gold); }
         .skill-ready:hover { transform: scale(1.1); background: #333; }
@@ -267,10 +267,10 @@
 
             <div class="bottom-hud">
                 <div class="skills-bar">
-                    <div class="skill-btn skill-ready" id="skill-q" onclick="castSkill('f1')"><span class="skill-key">Q</span>滅<div class="skill-cooldown" id="cd-q"></div></div>
-                    <div class="skill-btn skill-ready" id="skill-w" onclick="castSkill('f2')"><span class="skill-key">W</span>定<div class="skill-cooldown" id="cd-w"></div></div>
-                    <div class="skill-btn skill-ready" id="skill-e" onclick="castSkill('f3')"><span class="skill-key">E</span>示<div class="skill-cooldown" id="cd-e"></div></div>
-                    <div class="skill-btn skill-ready" id="skill-r" onclick="castSkill('f4')"><span class="skill-key">R</span>癒<div class="skill-cooldown" id="cd-r"></div></div>
+                    <div class="skill-btn skill-ready" id="skill-f1" onclick="castSkill('f1')"><span class="skill-key">F1</span>滅<div class="skill-cooldown" id="cd-f1"></div></div>
+                    <div class="skill-btn skill-ready" id="skill-f2" onclick="castSkill('f2')"><span class="skill-key">F2</span>定<div class="skill-cooldown" id="cd-f2"></div></div>
+                    <div class="skill-btn skill-ready" id="skill-f3" onclick="castSkill('f3')"><span class="skill-key">F3</span>示<div class="skill-cooldown" id="cd-f3"></div></div>
+                    <div class="skill-btn skill-ready" id="skill-f4" onclick="castSkill('f4')"><span class="skill-key">F4</span>癒<div class="skill-cooldown" id="cd-f4"></div></div>
                 </div>
 
                 <div class="hp-container">
@@ -458,7 +458,7 @@
         killCount: 0, bossTrigger: 20, 
         speed: 0.6,
         bgIndex: 0, bgTimer: 0,
-        skills: { q: true, w: true, e: true, r: true },
+        skills: { f1: true, f2: true, f3: true, f4: true },
         frozen: false,
         lockedTarget: null,
         combo: 0,
@@ -872,14 +872,18 @@
         updateComboUI();
     }
 
+    // 修改：只監聽 F1 - F4
     document.addEventListener('keydown', (e) => {
         if (!state.running) return;
-        if (['f1','f2','f3','f4'].includes(e.key.toLowerCase())) {
-            useSkill(e.key.toLowerCase());
+        
+        if (e.key === 'F1' || e.key === 'F2' || e.key === 'F3' || e.key === 'F4') {
+            e.preventDefault(); // 防止瀏覽器默認行為（如幫助頁面）
+            castSkill(e.key.toLowerCase());
         }
     });
 
-    function useSkill(key) {
+    // 修正：函數名稱統一為 castSkill
+    function castSkill(key) {
         if (!state.skills[key]) return; 
 
         if (key === 'f1') { 
@@ -888,7 +892,7 @@
             state.enemies.forEach(e => {
                 if(!e.dead) handleKill(e);
             });
-            startCooldown('q', 15); 
+            startCooldown('f1', 15); 
         }
         else if (key === 'f2') { 
             showStatus("定！");
@@ -898,7 +902,7 @@
                 state.frozen = false;
                 document.getElementById('bg-layer').style.filter = "none";
             }, 5000); 
-            startCooldown('w', 20);
+            startCooldown('f2', 20);
         }
         else if (key === 'f3') { 
             showStatus("示！");
@@ -912,13 +916,13 @@
                     if(hint) hint.style.opacity = 0;
                 });
             }, 5000); 
-            startCooldown('e', 10);
+            startCooldown('f3', 10);
         }
         else if (key === 'f4') { 
             state.hp = Math.min(state.hp + 30, 100);
             updateUI();
             showStatus("癒！");
-            startCooldown('r', 25);
+            startCooldown('f4', 25);
         }
     }
 
