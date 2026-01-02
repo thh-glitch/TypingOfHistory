@@ -488,7 +488,7 @@
         state.lockedTarget = null;
         state.combo = 0; updateComboUI();
         
-        ['q','w','e','r'].forEach(k => {
+        ['f1','f2','f3','f4'].forEach(k => {
             state.skills[k] = true;
             document.getElementById(`skill-${k}`).classList.add('skill-ready');
             document.getElementById(`cd-${k}`).style.height = '0%';
@@ -829,7 +829,7 @@
 
     document.addEventListener('keydown', (e) => {
         if (!state.running) return;
-        if (['q','w','e','r'].includes(e.key.toLowerCase())) {
+        if (['f1','f2','f3','f4'].includes(e.key.toLowerCase())) {
             useSkill(e.key.toLowerCase());
         }
     });
